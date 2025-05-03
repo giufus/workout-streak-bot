@@ -1,0 +1,32 @@
+# docker-compose.yml
+version: '3.8' # Use a recent version
+
+services:
+  # Redis Service
+  redis:
+    image: redis:8.0-rc1 # Use an official Redis image (alpine is smaller)
+    container_name: workout-redis
+    restart: unless-stopped
+    ports:
+      # Map host port 6379 to container port 6379 (optional, only if you need external access)
+      # - "127.0.0.1:6379:6379" # Limit access to localhost on the host machine
+      - "6379:6379" # Or expose more broadly if needed
+    volumes:
+      - redis-data:/data # Persist Redis data using a named volume
+    # Optional: Set a password for Redis
+    # command: redis-server --requirepass your_strong_redis_password
+    # If using password, make sure REDIS_PASSWORD is set in the .env file for the bot service
+
+  # Python Bot Service
+  bot:
+    build: . # Build the image from the Dockerfile in the current directory
+    container_name: workout-bot
+    restart: unless-stopped
+    depends_on:
+      - redis # Ensure redis starts before the bot
+    env_file:
+      - .env # Load environment variables from the .env file
+
+volumes:
+  # Define the named volume for Redis persistence
+  redis-data:

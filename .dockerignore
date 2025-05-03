@@ -1,0 +1,15 @@
+# .dockerignore
+Dockerfile
+docker-compose.yml
+.dockerignore
+.env
+.git
+.gitignore
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+venv/
+*.log
+README.md
+# Add any other files/folders you don't need in the image
