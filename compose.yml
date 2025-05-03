@@ -4,7 +4,7 @@ version: '3.8' # Use a recent version
 services:
   # Redis Service
   redis:
-    image: redis:8.0-rc1 # Use an official Redis image (alpine is smaller)
+    image: redis:8.0-rc1-alpine # Use an official Redis image (alpine is smaller)
     container_name: workout-redis
     restart: unless-stopped
     ports:
