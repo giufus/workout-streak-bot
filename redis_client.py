@@ -24,13 +24,22 @@ try:
     )
     redis_conn.ping()
     print("Successfully connected to Redis.")
-except redis.exceptions.ConnectionError as e:
-    print(f"Error connecting to Redis: {e}")
+# Add specific exception for authentication failure
+except redis.exceptions.AuthenticationError:
+    print(f"Error connecting to Redis: Authentication failed. Check REDIS_PASSWORD environment variable.")
     redis_conn = None
-    exit()
+    # exit() # Exit might not be desired if running in a managed environment like OpenShift
+except redis.exceptions.ConnectionError as e:
+    print(f"Error connecting to Redis ({REDIS_HOST}:{REDIS_PORT}): {e}")
+    redis_conn = None
+    # exit()
+except Exception as e: # Catch other potential errors
+     print(f"An unexpected error occurred during Redis connection: {e}")
+     redis_conn = None
+     # exit()
+
 
 # --- setup_initial_data, get_exercise_id_from_alias, get_exercise_details, get_all_exercise_details (Keep as before) ---
-# ... (paste previous versions here) ...
 def setup_initial_data():
     """Sets up exercise aliases and details in Redis if not present."""
     if not redis_conn: return
@@ -56,14 +65,11 @@ def setup_initial_data():
     else:
         print("Exercise data likely already exists in Redis.")
 
-
 def get_exercise_id_from_alias(alias: str) -> str | None:
-    """Finds the internal exercise ID based on its alias."""
     if not redis_conn: return None
     return redis_conn.hget(EXERCISE_ALIAS_KEY, alias.lower())
 
 def get_exercise_details(exercise_id: str) -> dict | None:
-    """Gets the name and goal for an exercise."""
     if not redis_conn: return None
     details = redis_conn.hgetall(f"{EXERCISE_DETAILS_PREFIX}{exercise_id}")
     if details and 'goal' in details:
@@ -75,7 +81,6 @@ def get_exercise_details(exercise_id: str) -> dict | None:
     return details if details else None
 
 def get_all_exercise_details() -> dict:
-    """Gets details for all defined exercises."""
     if not redis_conn: return {}
     all_details = {}
     aliases = redis_conn.hgetall(EXERCISE_ALIAS_KEY)
@@ -88,8 +93,8 @@ def get_all_exercise_details() -> dict:
              all_details[ex_id] = details
              all_details[ex_id]['alias'] = alias
     return all_details
-# --- Updated Functions ---
 
+# --- store_user_info, get_user_display_name_and_time (Keep as before) ---
 def store_user_info(user_id: int, first_name: str, username: str | None, update_time: int | None = None):
     """Stores or updates user's first name, username, and optionally last update time."""
     if not redis_conn: return
@@ -98,103 +103,82 @@ def store_user_info(user_id: int, first_name: str, username: str | None, update_
     if username:
         info_to_store["username"] = username
     else:
-         # Explicitly remove username field if it's None now but might have existed before
-         redis_conn.hdel(user_info_key, "username")
+         redis_conn.hdel(user_info_key, "username") # Remove if None
 
     if update_time is not None:
-         info_to_store["last_update"] = str(update_time) # Store timestamp as string
+         info_to_store["last_update"] = str(update_time)
 
-    # Use hset which updates fields or creates the hash
-    if info_to_store: # Only call hset if there's something to store/update
+    if info_to_store:
         redis_conn.hset(user_info_key, mapping=info_to_store)
 
-# Modified to return timestamp as well
 def get_user_display_name_and_time(user_id: int) -> tuple[str, int | None]:
-    """
-    Gets the best display name and the last update timestamp for a user.
-    Returns: (display_name, last_update_timestamp | None)
-    """
+    """Gets display name and last update timestamp."""
     if not redis_conn: return f"User {user_id}", None
-
     user_info_key = f"{USER_INFO_PREFIX}{user_id}"
     user_info = redis_conn.hgetall(user_info_key)
-
-    display_name = f"User {user_id}" # Default fallback
-    if user_info.get("username"):
-        display_name = f"@{user_info['username']}"
-    elif user_info.get("first_name"):
-        display_name = user_info['first_name']
-
+    display_name = f"User {user_id}"
+    if user_info.get("username"): display_name = f"@{user_info['username']}"
+    elif user_info.get("first_name"): display_name = user_info['first_name']
     last_update_timestamp = None
     if user_info.get("last_update"):
-        try:
-            last_update_timestamp = int(user_info["last_update"])
-        except (ValueError, TypeError):
-            print(f"Warning: Could not parse last_update '{user_info['last_update']}' for user {user_id}")
-            last_update_timestamp = None # Treat invalid data as None
-
+        try: last_update_timestamp = int(user_info["last_update"])
+        except (ValueError, TypeError): last_update_timestamp = None
     return display_name, last_update_timestamp
 
-
-# Modified to store timestamp
+# --- record_player_progress (Keep as before) ---
 def record_player_progress(user_id: int, user_first_name: str, user_username: str | None, exercise_id: str, value: int) -> int:
     """Adds value to a player's score and updates user info including last update time. Returns new total."""
     if not redis_conn: return 0
     player_key = f"{PLAYER_PREFIX}{user_id}"
-    current_timestamp = int(time.time()) # Get current Unix timestamp
-
-    # Use a pipeline for atomicity (or near-atomicity) of updates
-    pipe = redis_conn.pipeline()
-
-    # 1. Update User Info (including timestamp)
-    user_info_key = f"{USER_INFO_PREFIX}{user_id}"
-    info_to_store = {"first_name": user_first_name, "last_update": str(current_timestamp)}
-    if user_username:
-        info_to_store["username"] = user_username
-    # Queue HSET for user info
-    pipe.hset(user_info_key, mapping=info_to_store)
-    # If username is None, ensure it's removed if it exists
-    if not user_username:
-         pipe.hdel(user_info_key, "username")
-
-    # 2. Add player to the set of active players
-    pipe.sadd(PLAYERS_SET_KEY, str(user_id))
-
-    # 3. Atomically increment the score for the exercise
-    # HINCRBY needs to be executed separately to get the return value easily,
-    # or handle its result index from the pipeline execution if needed elsewhere.
-    # For simplicity here, we execute HINCRBY after the pipeline that updates info.
-    # This is usually acceptable unless strict atomicity between info and score is critical.
-    pipe.execute() # Execute info update and set add
-
-    # Now increment the score
+    current_timestamp = int(time.time())
+    # Update user info first (includes timestamp)
+    store_user_info(user_id, user_first_name, user_username, current_timestamp)
+    # Add player to set
+    redis_conn.sadd(PLAYERS_SET_KEY, str(user_id))
+    # Increment score
     new_total = redis_conn.hincrby(player_key, exercise_id, value)
-
     return new_total
+
+# --- NEW FUNCTION ---
+def reset_player_exercise(user_id: int, user_first_name: str, user_username: str | None, exercise_id: str) -> bool:
+    """Resets a player's score for a specific exercise to 0 and updates timestamp."""
+    if not redis_conn: return False
+    player_key = f"{PLAYER_PREFIX}{user_id}"
+    current_timestamp = int(time.time())
+    try:
+        # Update user info timestamp first
+        store_user_info(user_id, user_first_name, user_username, current_timestamp)
+        # Set the specific exercise score to 0 in the player's hash
+        # HSET returns 1 if field created, 0 if updated. We just care it succeeded.
+        redis_conn.hset(player_key, exercise_id, 0)
+        # Add player to set if they somehow weren't there but resetting
+        redis_conn.sadd(PLAYERS_SET_KEY, str(user_id))
+        print(f"Reset score for user {user_id} on exercise {exercise_id} to 0.")
+        return True
+    except redis.RedisError as e:
+        print(f"Redis error resetting score for user {user_id} on {exercise_id}: {e}")
+        return False
+    except Exception as e:
+        print(f"Unexpected error resetting score for user {user.id} on {exercise_id}: {e}")
+        return False
+
 
 # --- get_player_progress, get_all_players_progress (Keep as before) ---
 def get_player_progress(user_id: int) -> dict:
-    """Gets all progress for a specific player."""
     if not redis_conn: return {}
     player_key = f"{PLAYER_PREFIX}{user_id}"
     progress = redis_conn.hgetall(player_key)
     return {ex_id: int(score) for ex_id, score in progress.items()}
 
 def get_all_players_progress() -> dict:
-    """Gets progress for all players who have recorded data."""
     if not redis_conn: return {}
     all_progress = {}
     player_ids = redis_conn.smembers(PLAYERS_SET_KEY)
-    if not player_ids:
-        return {}
-
+    if not player_ids: return {}
     pipe = redis_conn.pipeline(transaction=False)
     keys_to_fetch = [f"{PLAYER_PREFIX}{user_id}" for user_id in player_ids]
-    for key in keys_to_fetch:
-        pipe.hgetall(key)
-
+    for key in keys_to_fetch: pipe.hgetall(key)
     results = pipe.execute()
-
     for i, user_id_str in enumerate(player_ids):
         user_id = int(user_id_str)
         raw_progress = results[i]
@@ -203,9 +187,7 @@ def get_all_players_progress() -> dict:
         else:
             print(f"Warning: No progress data found or unexpected result for user {user_id}")
             all_progress[user_id] = {}
-
     return all_progress
-
 
 # Run setup when this module is imported
 setup_initial_data()
