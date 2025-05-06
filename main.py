@@ -262,6 +262,36 @@ async def all_progress(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     except Exception as e: logger.error(f"Failed send public /all photo to chat {chat.id}: {e}", exc_info=True); await update.message.reply_text("😥 Sorry, I couldn't send the chart image.")
 
 
+async def message_store_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handles regular text messages to backup them using user_id as key."""
+    user = update.effective_user
+    message = update.effective_message
+    # Basic checks: Must have user, message, text, and not be a command
+    if not user or not message or not message.text or message.text.startswith('/'):
+        return
+
+    # Only store messages from groups or supergroups
+    if message.chat.type not in ['group', 'supergroup']:
+        return
+
+    # Use user.id for the key, text for the value, and message.date for the score
+    user_id = user.id
+    message_text = message.text
+    # Use message.date (timezone-aware UTC datetime from Telegram)
+    message_time = message.date
+
+    # logger.debug(f"Attempting to store message from user {user_id} in chat {message.chat.id}")
+
+    success = rc.store_user_message(
+        user_id=user_id,
+        message_text=message_text,
+        message_time=message_time
+    )
+    if not success:
+        logger.warning(f"Failed to store message for user {user_id} from chat {message.chat.id}")
+# --- END UPDATED MESSAGE HANDLER ---
+
+
 # --- Main Bot Execution ---
 def main() -> None:
     """Start the bot."""
@@ -294,6 +324,11 @@ def main() -> None:
     application.add_handler(MessageHandler(
         filters.COMMAND & filters.Regex(EXERCISE_RESET_PATTERN) & (~filters.UpdateType.EDITED_MESSAGE),
         reset_progress_handler
+    ))
+
+    application.add_handler(MessageHandler(
+        filters.TEXT & (~filters.COMMAND) & (filters.ChatType.GROUPS),
+        message_store_handler
     ))
 
     logger.info("Starting bot polling...")

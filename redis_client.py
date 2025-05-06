@@ -12,6 +12,8 @@ EXERCISE_ALIAS_KEY = "exercise:aliases"
 EXERCISE_DETAILS_PREFIX = "exercise:details:"
 PLAYERS_SET_KEY = "players:ids"
 USER_INFO_PREFIX = "user:info:"
+MESSAGES_USER_PREFIX = "messages:user:"
+
 
 # --- Initialize Redis Connection (Keep as before) ---
 try:
@@ -188,6 +190,33 @@ def get_all_players_progress() -> dict:
             print(f"Warning: No progress data found or unexpected result for user {user_id}")
             all_progress[user_id] = {}
     return all_progress
+
+
+def get_messages_key_for_user(user_id: int) -> str:
+    """Constructs the Redis Sorted Set key for a user's messages."""
+    return f"{MESSAGES_USER_PREFIX}{user_id}"
+
+
+def store_user_message(user_id: int, message_text: str, message_time: datetime) -> bool:
+    """Stores a user's message in their sorted set using timestamp as score."""
+    if not redis_conn:
+        print("Redis connection not available for store_user_message.")
+        return False
+
+    messages_key = get_messages_key_for_user(user_id)
+    timestamp_score = message_time.timestamp() # Use Unix float timestamp for score
+
+    try:
+        # ZADD key score member [score member ...]
+        # If message_text (member) already exists, its score (timestamp) is updated.
+        # This naturally handles storing the same message text multiple times if sent at different times.
+        redis_conn.zadd(messages_key, {message_text: timestamp_score})
+        # logger.debug(f"Stored message for user {user_id} in key {messages_key}") # Maybe too verbose
+        return True
+    except Exception as e:
+        print(f"Error ZADD message to Redis key {messages_key} for user {user_id}: {e}", exc_info=True)
+        return False
+
 
 # Run setup when this module is imported
 setup_initial_data()
