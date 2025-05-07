@@ -13,3 +13,5 @@ venv/
 *.log
 README.md
 # Add any other files/folders you don't need in the image
+openshift-export/
+workout-streak-bot.txt

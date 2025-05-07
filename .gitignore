@@ -10,3 +10,6 @@ wheels/
 .venv
 
 .env
+
+openshift-export/
+workout-streak-bot.txt

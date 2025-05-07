@@ -1,0 +1,42 @@
+{
+    "plank": {
+        "name": "Plank (Seconds)",
+        "alias": "plk",
+        "goal": 300
+    },
+    "rope": {
+        "name": "Rope Skipping (Mins)",
+        "alias": "rop",
+        "goal": 60
+    },
+    "pushup": {
+        "name": "Push-Ups",
+        "alias": "psh",
+        "goal": 500
+    },
+    "squat": {
+        "name": "Squats",
+        "alias": "sqt",
+        "goal": 1000
+    },
+    "abs": {
+        "name": "Abs Circuit (Reps)",
+        "alias": "abs",
+        "goal": 1000
+    },
+    "jab": {
+        "name": "Jabs",
+        "alias": "jab",
+        "goal": 2000
+    },
+    "uppercut": {
+        "name": "Uppercuts",
+        "alias": "upc",
+        "goal": 1000
+    },
+    "hook": {
+        "name": "Hooks",
+        "alias": "hks",
+        "goal": 2000
+    }
+}
