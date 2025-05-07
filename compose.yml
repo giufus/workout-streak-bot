@@ -13,6 +13,8 @@ services:
     # Optional: Set a password for Redis
     # command: redis-server --requirepass your_strong_redis_password
     # If using password, make sure REDIS_PASSWORD is set in the .env file for the bot service
+    networks:
+      - wkt
 
   # Python Bot Service
   bot:
@@ -23,7 +25,17 @@ services:
       - wkt-redis # Ensure redis starts before the bot
     env_file:
       - .env # Load environment variables from the .env file
+    volumes:
+      - ./exercises.json:/opt/exercises.json
+    networks:
+      - wkt
+    
 
 volumes:
-  # Define the named volume for Redis persistence
   wkt-redis-data:
+  bot-data:
+
+
+networks:
+  wkt:
+    name: wkt

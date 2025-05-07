@@ -42,9 +42,19 @@ except Exception as e: # Catch other potential errors
 
 
 # --- setup_initial_data, get_exercise_id_from_alias, get_exercise_details, get_all_exercise_details (Keep as before) ---
-def setup_initial_data():
+def setup_initial_data(hard_reset=False):
     """Sets up exercise aliases and details in Redis if not present."""
+    
     if not redis_conn: return
+
+    if hard_reset:
+        print("Performing hard reset: Deleting all exercise detail keys.")
+        # Delete all keys prefixed with EXERCISE_DETAILS_PREFIX
+        all_keys = redis_conn.keys(f"{EXERCISE_DETAILS_PREFIX}*")
+        if all_keys:
+            redis_conn.delete(*all_keys)
+
+
     print("Setting up initial exercise data in Redis...")
     aliases = {}
     example_ex_id = next(iter(EXERCISES)) # Get the first key from EXERCISES dict

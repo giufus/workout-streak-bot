@@ -289,7 +289,22 @@ async def message_store_handler(update: Update, context: ContextTypes.DEFAULT_TY
     )
     if not success:
         logger.warning(f"Failed to store message for user {user_id} from chat {message.chat.id}")
-# --- END UPDATED MESSAGE HANDLER ---
+
+
+async def hard_reset_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user = update.effective_user
+    if not user:
+        return
+
+    is_admin = await is_user_admin(update, context)
+    if not is_admin:
+        await update.message.reply_text("⛔ You are not authorized to use this command.", quote=True)
+        return
+
+    logger.info(f"User {user.id} initiated a hard reset.")
+    rc.setup_initial_data(hard_reset=True)
+    await update.message.reply_text("✅ Hard reset performed successfully.", quote=True)
+
 
 
 # --- Main Bot Execution ---
@@ -314,6 +329,7 @@ def main() -> None:
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("my", my_progress))
     application.add_handler(CommandHandler("all", all_progress))
+    application.add_handler(CommandHandler("hard-reset", hard_reset_handler))
 
     # Handler for LOGGING progress (/alias <number>)
     application.add_handler(MessageHandler(
@@ -331,10 +347,27 @@ def main() -> None:
         message_store_handler
     ))
 
+
     logger.info("Starting bot polling...")
     print("Bot starting...")
     application.run_polling(allowed_updates=Update.ALL_TYPES)
     print("Bot stopped.")
+
+async def is_user_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
+    """Check if the user initiating a command is an admin."""
+    user = update.effective_user
+    chat = update.effective_chat
+
+    if not user or not chat:
+        return False
+    
+    try:
+        member = await context.bot.get_chat_member(chat_id=chat.id, user_id=user.id)
+        return member.status in ['administrator', 'creator']
+    except Exception as e:
+        logger.error(f"Error checking admin status for user {user.id}: {e}", exc_info=True)
+        return False
+
 
 if __name__ == "__main__":
     main()
