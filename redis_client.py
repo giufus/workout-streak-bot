@@ -171,7 +171,7 @@ def reset_player_exercise(user_id: int, user_first_name: str, user_username: str
         print(f"Redis error resetting score for user {user_id} on {exercise_id}: {e}")
         return False
     except Exception as e:
-        print(f"Unexpected error resetting score for user {user.id} on {exercise_id}: {e}")
+        print(f"Unexpected error resetting score for user {user_id} on {exercise_id}: {e}")
         return False
 
 
