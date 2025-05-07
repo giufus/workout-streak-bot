@@ -329,7 +329,7 @@ def main() -> None:
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("my", my_progress))
     application.add_handler(CommandHandler("all", all_progress))
-    application.add_handler(CommandHandler("hard-reset", hard_reset_handler))
+    application.add_handler(CommandHandler("hardreset", hard_reset_handler))
 
     # Handler for LOGGING progress (/alias <number>)
     application.add_handler(MessageHandler(
