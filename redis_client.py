@@ -2,7 +2,7 @@
 import redis
 import json
 import time # Import the time module
-from datetime import datetime # Import datetime for formatting
+from datetime import datetime, timezone # Import datetime for formatting
 
 from config import REDIS_HOST, REDIS_PORT, REDIS_DB, REDIS_PASSWORD, EXERCISES
 
@@ -13,6 +13,7 @@ EXERCISE_DETAILS_PREFIX = "exercise:details:"
 PLAYERS_SET_KEY = "players:ids"
 USER_INFO_PREFIX = "user:info:"
 MESSAGES_USER_PREFIX = "messages:user:"
+USER_MESSAGE_STREAM_PREFIX = "user_messages:stream:"
 
 
 # --- Initialize Redis Connection (Keep as before) ---
@@ -207,7 +208,7 @@ def get_messages_key_for_user(user_id: int) -> str:
     return f"{MESSAGES_USER_PREFIX}{user_id}"
 
 
-def store_user_message(user_id: int, message_text: str, message_time: datetime) -> bool:
+def store_user_message_sortedset(user_id: int, message_text: str, message_time: datetime) -> bool:
     """Stores a user's message in their sorted set using timestamp as score."""
     if not redis_conn:
         print("Redis connection not available for store_user_message.")
@@ -215,7 +216,7 @@ def store_user_message(user_id: int, message_text: str, message_time: datetime) 
 
     messages_key = get_messages_key_for_user(user_id)
     timestamp_score = message_time.timestamp() # Use Unix float timestamp for score
-
+    
     try:
         # ZADD key score member [score member ...]
         # If message_text (member) already exists, its score (timestamp) is updated.
@@ -226,6 +227,65 @@ def store_user_message(user_id: int, message_text: str, message_time: datetime) 
     except Exception as e:
         print(f"Error ZADD message to Redis key {messages_key} for user {user_id}: {e}", exc_info=True)
         return False
+    
+
+def store_user_message_stream(user_id: int, message_text: str, message_timestamp: float, chat_id: int | None = None, telegram_message_id: int | None = None) -> str | None:
+    """
+    Stores a user's message in a daily Redis Stream.
+    The stream key is of the format: user_messages:stream:YYYY-MM-DD
+
+    Args:
+        user_id: The Telegram user ID.
+        message_text: The text content of the message.
+        message_timestamp: The UNIX timestamp (float) of when the message was originally sent.
+        chat_id: (Optional) The Telegram chat ID where the message originated.
+        telegram_message_id: (Optional) The Telegram message ID.
+
+    Returns:
+        The ID of the message entry in the stream if successful, None otherwise.
+    """
+    if not redis_conn:
+        print("Redis connection not available. Cannot store user message in stream.")
+        # In a real application, you would log this error.
+        return None
+
+    try:
+        # Generate daily stream key using UTC date to ensure consistency.
+        # The stream name itself is based on the current day the function is called.
+        current_utc_date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        stream_key = f"{USER_MESSAGE_STREAM_PREFIX}{current_utc_date_str}"
+
+        # Prepare message data for the stream. All values should be strings.
+        message_data = {
+            "user_id": str(user_id),
+            "text": message_text,
+            "original_ts": str(message_timestamp) # Store original message timestamp
+        }
+        if chat_id is not None:
+            message_data["chat_id"] = str(chat_id)
+        if telegram_message_id is not None:
+            message_data["telegram_msg_id"] = str(telegram_message_id)
+
+
+        # Add the message to the stream.
+        # '*' auto-generates a unique ID for the entry (timestamp_ms-sequence_no).
+        # NOMKSTREAM is False by default, so stream is created if it doesn't exist.
+        # MAXLEN can be used to cap the stream, e.g., MAXLEN ~ 1000000 (approximate trimming)
+        stream_entry_id = redis_conn.xadd(name=stream_key, fields=message_data, id='*')
+
+        # For debugging or logging, you might print/log success.
+        #print(f"Stored message from user {user_id} in stream '{stream_key}' with entry ID {stream_entry_id}")
+        
+        return stream_entry_id
+    except redis.RedisError as e:
+        print(f"Redis error storing message for user {user_id} in stream '{stream_key}': {e}")
+        # Log error (e.g., using standard logging library)
+        return None
+    except Exception as e:
+        print(f"Unexpected error storing message for user {user_id} in stream '{stream_key}': {e}")
+        # Log error
+        return None
+
 
 
 # Run setup when this module is imported

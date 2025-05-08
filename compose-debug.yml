@@ -18,19 +18,19 @@ services:
       - wkt
 
   # Python Bot Service
-  bot:
-    image: giufus/workout-bot
+  #bot:
+    #image: giufus/workout-bot
     #build: .
-    container_name: workout-streak-bot
-    restart: unless-stopped
-    depends_on:
-      - wkt-redis # Ensure redis starts before the bot
-    env_file:
-      - .env # Load environment variables from the .env file
-    volumes:
-      - ./exercises.json:/opt/exercises.json
-    networks:
-      - wkt
+    #container_name: workout-streak-bot
+    #restart: unless-stopped
+    #depends_on:
+    #  - wkt-redis # Ensure redis starts before the bot
+    #env_file:
+    #  - .env # Load environment variables from the .env file
+    #volumes:
+    #  - ./exercises.json:/opt/exercises.json
+    #networks:
+    #  - wkt
     
 
 volumes:

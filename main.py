@@ -266,6 +266,8 @@ async def message_store_handler(update: Update, context: ContextTypes.DEFAULT_TY
     """Handles regular text messages to backup them using user_id as key."""
     user = update.effective_user
     message = update.effective_message
+    chat = update.effective_chat
+
     # Basic checks: Must have user, message, text, and not be a command
     if not user or not message or not message.text or message.text.startswith('/'):
         return
@@ -279,16 +281,35 @@ async def message_store_handler(update: Update, context: ContextTypes.DEFAULT_TY
     message_text = message.text
     # Use message.date (timezone-aware UTC datetime from Telegram)
     message_time = message.date
+    # message.date is a datetime object, convert to UNIX timestamp (float)
+    message_timestamp = message.date.timestamp()
+    chat_id = chat.id if chat else None
+    telegram_message_id = message.message_id
 
     # logger.debug(f"Attempting to store message from user {user_id} in chat {message.chat.id}")
 
-    success = rc.store_user_message(
+    # Update user info first (includes timestamp)
+    rc.store_user_info(user_id=user.id, first_name=user.first_name, username=user.username)
+
+    success_sset = rc.store_user_message_sortedset(
         user_id=user_id,
         message_text=message_text,
         message_time=message_time
     )
-    if not success:
-        logger.warning(f"Failed to store message for user {user_id} from chat {message.chat.id}")
+
+    success_stream = rc.store_user_message_stream(
+        user_id=user_id,
+        message_text=message_text,
+        message_timestamp=message_timestamp,
+        chat_id=chat_id,
+        telegram_message_id=telegram_message_id
+    )
+
+    if not success_sset:
+        logger.warning(f"Failed to store message to the sorted set for user {user_id} from chat {message.chat.id}")
+
+    if not success_stream:
+        logger.warning(f"Failed to store message to the stream for user {user_id} from chat {message.chat.id}")
 
 
 async def hard_reset_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
